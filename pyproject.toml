@@ -1,0 +1,12 @@
+[project]
+name = "yt-remote"
+version = "0.1.0"
+description = "Control YouTube in your laptop browser from your phone, over a free ntfy.sh topic."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "playwright>=1.45",
+    "qrcode>=7.4",
+    "requests>=2.31",
+]

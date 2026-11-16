@@ -1,0 +1,233 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<title>Commander Remote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  /* Tactical-HUD theme: dark armor plating, amber command accents, cyan telemetry. */
+  :root {
+    --bg:#07090d; --plate:#11151d; --plate-2:#171c26; --edge:#2a3242;
+    --text:#eef2f7; --muted:#7f8a9c; --amber:#ffb21a; --amber-dim:#a8720a;
+    --cyan:#3fd0ff; --red:#ff3b4e; --cut:12px;
+    --hud: 'Share Tech Mono', ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
+  body {
+    margin:0; color:var(--text); font:16px/1.4 Oxanium, system-ui, sans-serif; min-height:100vh;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgba(255,178,26,.14), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 4px),
+      linear-gradient(rgba(63,208,255,.05) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(90deg, rgba(63,208,255,.05) 1px, transparent 1px) 0 0 / 32px 32px,
+      var(--bg);
+  }
+  main { max-width: 480px; margin: 0 auto; display: grid; gap: 14px; }
+
+  /* angled-corner plates */
+  .plate { clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+
+  header { display:flex; align-items:flex-end; justify-content:space-between; border-bottom: 2px solid var(--amber); padding-bottom: 8px; position: relative; }
+  header::after { content:""; position:absolute; right:0; bottom:-6px; width:70px; height:4px; background: var(--amber);
+                  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+  .brand small { display:block; font: 11px var(--hud); color: var(--amber); letter-spacing: .3em; }
+  h1 { margin:0; font-size: clamp(16px, 5.2vw, 22px); white-space: nowrap; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; font-style: italic; }
+  h1 span { color: var(--amber); }
+  .brand { min-width: 0; }
+  #conn { white-space: nowrap; flex-shrink: 0; margin-left: 8px; font: 12px var(--hud); color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+  #conn.ok { color: var(--cyan); }
+  #conn.ok::before { content:"◆ "; animation: blink 1.6s infinite; }
+  #conn.bad { color: var(--red); }
+  #conn.bad::before { content:"▲ "; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  .card { background: linear-gradient(160deg, var(--plate-2), var(--plate)); padding: 14px 16px; position: relative; }
+  .card::before { content: attr(data-label); display:block; font: 11px var(--hud); color: var(--amber); letter-spacing: .25em; margin-bottom: 6px; }
+  .card::after { content:""; position:absolute; left:0; top:var(--cut); bottom:0; width:3px; background: var(--amber); }
+  #title { font-weight: 600; font-size: 17px; min-height: 1.4em; overflow-wrap: anywhere; }
+  #meta { color: var(--cyan); font: 13px var(--hud); margin-top: 4px; letter-spacing: .05em; }
+  progress { -webkit-appearance:none; appearance:none; width:100%; height:6px; margin-top:12px; border:0; background: var(--edge); }
+  progress::-webkit-progress-bar { background: var(--edge); }
+  progress::-webkit-progress-value { background: linear-gradient(90deg, var(--amber-dim), var(--amber)); box-shadow: 0 0 8px var(--amber); }
+  progress::-moz-progress-bar { background: var(--amber); }
+
+  .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .grid4 { grid-template-columns: repeat(4, 1fr); }
+  button {
+    appearance:none; border:0; font: 600 14px Oxanium, sans-serif; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text); background: linear-gradient(180deg, #1d2330, #131821); padding: 14px 6px; min-height: 56px;
+    cursor: pointer; touch-action: manipulation; position: relative;
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    box-shadow: inset 0 0 0 1px var(--edge); transition: transform .06s, background .1s;
+  }
+  button:active { transform: scale(.96); background: linear-gradient(180deg, #2a3343, #1b2230); color: var(--amber); }
+  button:disabled { opacity: .35; }
+  button.big { font-size: 24px; }
+  button.primary { background: linear-gradient(180deg, #ffc546, var(--amber)); color: #1a1100; box-shadow: 0 0 18px rgba(255,178,26,.35); }
+  button.primary:active { color: #000; background: var(--amber-dim); }
+  #playBtn { font-size: 28px; }
+
+  form { display:flex; gap: 8px; }
+  input {
+    flex:1; min-width:0; border:0; padding: 14px; color: var(--text); font: 15px var(--hud);
+    background: #0b0f15; box-shadow: inset 0 0 0 1px var(--edge);
+    clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
+  }
+  input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--cyan); }
+  input::placeholder { color: var(--muted); }
+  #results { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  #results button { clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px); width: 100%; text-align: left; padding: 12px; min-height: 0; font: 13px var(--hud); text-transform: none; letter-spacing: 0; }
+  #results:empty { display: none; }
+  .tag { font: 11px var(--hud); color: var(--muted); letter-spacing: .25em; margin: 2px 0 -6px; }
+  .tag::before { content:"// "; color: var(--amber); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand"><small>TACTICAL LINK</small><h1>Commander <span>Remote</span></h1></div>
+    <div id="conn">linking…</div>
+  </header>
+
+  <section class="card plate" data-label="NOW DEPLOYED">
+    <div id="title">—</div>
+    <div id="meta"></div>
+    <progress id="prog" max="1" value="0"></progress>
+  </section>
+
+  <div class="tag">PLAYBACK</div>
+  <section class="grid">
+    <button class="big" data-cmd="prev" aria-label="Previous">⏮</button>
+    <button class="big primary" data-cmd="toggle" aria-label="Play or pause" id="playBtn">⏯</button>
+    <button class="big" data-cmd="next" aria-label="Next">⏭</button>
+    <button data-cmd="seek" data-value="-10">−10s</button>
+    <button data-cmd="fullscreen">Burst</button>
+    <button data-cmd="seek" data-value="10">+10s</button>
+  </section>
+
+  <div class="tag">AUDIO / FEED</div>
+  <section class="grid grid4">
+    <button data-cmd="volume" data-value="-10" aria-label="Volume down">Vol−</button>
+    <button data-cmd="mute" aria-label="Mute">Mute</button>
+    <button data-cmd="volume" data-value="10" aria-label="Volume up">Vol+</button>
+    <button data-cmd="captions">CC</button>
+  </section>
+
+  <div class="tag">TEMPO</div>
+  <section class="grid grid4">
+    <button data-cmd="speed" data-value="0.75">0.75×</button>
+    <button data-cmd="speed" data-value="1">1×</button>
+    <button data-cmd="speed" data-value="1.5">1.5×</button>
+    <button data-cmd="home">Base</button>
+  </section>
+
+  <section class="card plate" data-label="SEARCH &amp; DEPLOY">
+    <form id="search">
+      <input id="q" type="search" placeholder="Search target or paste link" enterkeyhint="search" autocomplete="off">
+      <button class="primary" type="submit">Go</button>
+    </form>
+    <ul id="results" style="margin-top:10px"></ul>
+  </section>
+</main>
+
+<script>
+  const SERVER = {{ server|tojson }};
+  // The topic comes from the #fragment of the QR link (never from the server) and is remembered here.
+  const TOPIC_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  let TOPIC = '';
+  try { TOPIC = decodeURIComponent(location.hash.slice(1)); } catch (_) {}
+  try {
+    if (TOPIC_RE.test(TOPIC)) localStorage.setItem('ytr-topic', TOPIC);
+    else TOPIC = localStorage.getItem('ytr-topic') || '';
+  } catch (_) {}
+  if (location.hash) history.replaceState(null, '', location.pathname);  // keep it off-screen
+  const STATUS_TOPIC = TOPIC.slice(0, 57) + '-status';
+  const conn = document.getElementById('conn');
+
+  async function send(action, value) {
+    const cmd = { action };
+    if (value !== undefined) cmd.value = value;
+    try {
+      // text/plain body -> simple CORS request, no preflight. ntfy relays it to the laptop.
+      const r = await fetch(`${SERVER}/${TOPIC}?cache=no`, { method: 'POST', body: JSON.stringify(cmd) });
+      if (!r.ok) throw new Error(r.status === 429 ? 'rate limited, slow down' : 'HTTP ' + r.status);
+      if (navigator.vibrate) navigator.vibrate(15);
+    } catch (e) {
+      setConn(false, 'send failed: ' + e.message);
+    }
+  }
+
+  document.querySelectorAll('button[data-cmd]').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.value;
+    send(b.dataset.cmd, v === undefined ? undefined : Number(v));
+  }));
+
+  document.getElementById('search').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = document.getElementById('q').value.trim();
+    if (!q) return;
+    if (/^https?:\/\//i.test(q)) send('open', q); else send('search', q);
+    document.getElementById('q').blur();
+  });
+
+  function fmt(s) {
+    s = Math.max(0, Math.floor(s || 0));
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+  }
+
+  function render(st) {
+    document.getElementById('title').textContent = st.title || '—';
+    const meta = [];
+    if (st.live) meta.push('● LIVE');
+    else if (st.duration) meta.push(`${fmt(st.time)} / ${fmt(st.duration)}`);
+    if (st.playing !== undefined) meta.push(st.playing ? 'playing' : 'paused');
+    if (st.volume !== undefined) meta.push(st.muted ? 'muted' : `vol ${st.volume}`);
+    if (st.speed && st.speed !== 1) meta.push(`${st.speed}×`);
+    document.getElementById('meta').textContent = meta.join(' · ');
+    const prog = document.getElementById('prog');
+    prog.max = st.duration || 1; prog.value = st.duration ? st.time : 0;
+
+    const ul = document.getElementById('results');
+    ul.replaceChildren();
+    (st.results || []).forEach((t, i) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.textContent = `${i + 1}. ${t}`;   // textContent: titles are untrusted
+      b.addEventListener('click', () => send('pick', i));
+      li.appendChild(b); ul.appendChild(li);
+    });
+  }
+
+  function setConn(ok, text) { conn.className = ok ? 'ok' : 'bad'; conn.textContent = text; }
+
+  // Status from the laptop arrives on a sibling topic via Server-Sent Events.
+  if (!TOPIC_RE.test(TOPIC)) {
+    setConn(false, 'no link');
+    document.getElementById('title').textContent = 'Scan the QR code shown on the laptop to link this phone.';
+    document.querySelectorAll('button, input').forEach(el => { el.disabled = true; });
+    throw new Error('no topic');
+  }
+  const es = new EventSource(`${SERVER}/${STATUS_TOPIC}/sse`);
+  let lastStatusAsk = 0;
+  es.addEventListener('open', () => {
+    setConn(true, 'link active');
+    // Ask for fresh status, but not on every flaky reconnect (ntfy.sh rate limits).
+    if (Date.now() - lastStatusAsk > 30000) { lastStatusAsk = Date.now(); send('status'); }
+  });
+  es.addEventListener('error', () => setConn(false, 'signal lost…'));
+  es.onmessage = e => {
+    try {
+      const m = JSON.parse(e.data);
+      if (m.event === 'message') { render(JSON.parse(m.message)); setConn(true, 'link active'); }
+    } catch (_) { /* ignore malformed */ }
+  };
+</script>
+</body>
+</html>
