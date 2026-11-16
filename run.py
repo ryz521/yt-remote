@@ -9,6 +9,7 @@ from common import load_config
 def main():
     cfg = load_config()
     threading.Thread(target=web.serve, args=(cfg,), daemon=True).start()
+    threading.Thread(target=web.open_pairing_page, daemon=True).start()  # QR + link on screen
     controller.run(cfg)  # Playwright must own the main thread
 
 

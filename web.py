@@ -10,7 +10,8 @@ phone remembers it. Someone scanning the LAN only gets an unlinked remote.
 import socket
 import sys
 
-from flask import Flask, render_template
+from flask import Flask, abort, render_template, request
+from markupsafe import Markup
 
 from common import load_config
 
@@ -35,6 +36,14 @@ def create_app(cfg: dict) -> Flask:
     def index():
         return render_template("remote.html", server=cfg["server"])
 
+    @app.get("/pair")
+    def pair():
+        # The pairing page contains the secret, so it is only served to the laptop itself.
+        if request.remote_addr not in ("127.0.0.1", "::1"):
+            abort(404)
+        url = phone_url(cfg)
+        return render_template("pair.html", url=url, qr_svg=Markup(qr_svg(url)))
+
     @app.after_request
     def no_store(resp):
         resp.headers["Cache-Control"] = "no-store"
@@ -44,9 +53,38 @@ def create_app(cfg: dict) -> Flask:
     return app
 
 
+def phone_url(cfg: dict, port: int = PORT) -> str:
+    return f"http://{lan_ip()}:{port}/#{cfg['topic']}"
+
+
+def qr_svg(data: str) -> str:
+    import qrcode
+    from qrcode.image.svg import SvgPathFillImage
+
+    img = qrcode.make(data, image_factory=SvgPathFillImage, box_size=12, border=2)
+    return img.to_string(encoding="unicode")
+
+
+def open_pairing_page(port: int = PORT):
+    """Show the QR code + link on the laptop screen once the server is up."""
+    import time
+    import urllib.request
+    import webbrowser
+
+    pair = f"http://127.0.0.1:{port}/pair"
+    for _ in range(50):
+        try:
+            urllib.request.urlopen(pair, timeout=1).close()
+            break
+        except OSError:
+            time.sleep(0.2)
+    webbrowser.open(pair)
+
+
 def print_banner(cfg: dict, port: int = PORT):
-    url = f"http://{lan_ip()}:{port}/#{cfg['topic']}"
+    url = phone_url(cfg, port)
     print(f"\n  Phone remote: {url}")
+    print(f"  Pairing page (QR + link): http://127.0.0.1:{port}/pair")
     print("  Scan the QR with your phone (same Wi-Fi). The part after # is your secret topic.")
     print("  If the IP is wrong (VPN/WSL adapter), use the laptop's Wi-Fi IP from `ipconfig`.\n")
     try:

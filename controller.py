@@ -16,6 +16,10 @@ from common import PROFILE_DIR, load_config
 YOUTUBE = "https://www.youtube.com/"
 # Search result titles: legacy layout, and the newer lockup layout YouTube A/B-serves to some profiles.
 RESULT_SEL = "ytd-video-renderer a#video-title, ytd-search yt-lockup-view-model a.ytLockupMetadataViewModelTitle"
+SKIP_AD_SEL = (
+    ".ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, "
+    "button[id^='skip-button'], .ytp-ad-skip-button-container button"
+)
 NAV = {"wait_until": "domcontentloaded", "timeout": 15_000}
 ALLOWED_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
 MAX_CMD_AGE = 60  # seconds; ignore commands that arrive very late (e.g. after a reconnect)
@@ -65,6 +69,7 @@ STATUS_JS = """() => {
     out.volume = p.getVolume();
     out.muted = p.isMuted();
     out.speed = p.getPlaybackRate();
+    out.ad = p.classList.contains('ad-showing');
   }
   return out;
 }""".replace("RESULT_SEL", json.dumps(RESULT_SEL))
@@ -202,6 +207,35 @@ class Controller:
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
         page.keyboard.press(key)
 
+    def fullscreen(self, page):
+        """Toggle the player's fullscreen; on non-video pages toggle browser fullscreen (F11-like)."""
+        page.bring_to_front()
+        # Fullscreen needs a user gesture; CDP's userGesture flag provides one, which works
+        # even while an ad hides the player controls.
+        js = """(async () => {
+          if (document.fullscreenElement) { await document.exitFullscreen(); return 'exit'; }
+          const el = document.querySelector('#movie_player') || document.documentElement;
+          await el.requestFullscreen(); return 'enter';
+        })()"""
+        cdp = page.context.new_cdp_session(page)
+        try:
+            res = cdp.send("Runtime.evaluate", {"expression": js, "userGesture": True, "awaitPromise": True})
+            if "exceptionDetails" in res:
+                self.press("f")  # fall back to YouTube's own shortcut
+        finally:
+            cdp.detach()
+
+    def skip_ad(self, page):
+        """Click YouTube's own 'Skip' button once it is offered."""
+        btn = page.locator(SKIP_AD_SEL).filter(visible=True).first
+        if btn.count():
+            btn.click(timeout=3_000)
+            print("[cmd] ad skipped")
+        elif page.evaluate("() => !!document.querySelector('#movie_player.ad-showing')"):
+            print("[cmd] ad is not skippable yet")
+        else:
+            print("[cmd] no ad playing")
+
     # ---- commands ------------------------------------------------------
     def handle(self, cmd: dict):
         action = cmd["action"]
@@ -222,7 +256,9 @@ class Controller:
         elif action == "prev":
             page.go_back(**NAV)
         elif action == "fullscreen":
-            self.press("f")
+            self.fullscreen(page)
+        elif action == "skipad":
+            self.skip_ad(page)
         elif action == "captions":
             self.press("c")
         elif action == "home":

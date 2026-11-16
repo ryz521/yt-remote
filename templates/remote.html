@@ -68,6 +68,8 @@
   }
   button:active { transform: scale(.96); background: linear-gradient(180deg, #2a3343, #1b2230); color: var(--amber); }
   button:disabled { opacity: .35; }
+  .grid2 { grid-template-columns: 1fr 1fr; }
+  #skipBtn.ad { background: linear-gradient(180deg, #ff6170, var(--red)); color: #fff; box-shadow: 0 0 18px rgba(255,59,78,.45); animation: blink 1.2s infinite; }
   button.big { font-size: 24px; }
   button.primary { background: linear-gradient(180deg, #ffc546, var(--amber)); color: #1a1100; box-shadow: 0 0 18px rgba(255,178,26,.35); }
   button.primary:active { color: #000; background: var(--amber-dim); }
@@ -107,16 +109,20 @@
     <button class="big primary" data-cmd="toggle" aria-label="Play or pause" id="playBtn">⏯</button>
     <button class="big" data-cmd="next" aria-label="Next">⏭</button>
     <button data-cmd="seek" data-value="-10">−10s</button>
-    <button data-cmd="fullscreen">Burst</button>
+    <button data-cmd="captions">CC</button>
     <button data-cmd="seek" data-value="10">+10s</button>
   </section>
 
-  <div class="tag">AUDIO / FEED</div>
-  <section class="grid grid4">
+  <section class="grid grid2">
+    <button data-cmd="fullscreen" aria-label="Toggle fullscreen">⛶ Fullscreen</button>
+    <button data-cmd="skipad" id="skipBtn" aria-label="Skip ad">⏩ Skip Ad</button>
+  </section>
+
+  <div class="tag">AUDIO</div>
+  <section class="grid">
     <button data-cmd="volume" data-value="-10" aria-label="Volume down">Vol−</button>
     <button data-cmd="mute" aria-label="Mute">Mute</button>
     <button data-cmd="volume" data-value="10" aria-label="Volume up">Vol+</button>
-    <button data-cmd="captions">CC</button>
   </section>
 
   <div class="tag">TEMPO</div>
@@ -185,6 +191,8 @@
   function render(st) {
     document.getElementById('title').textContent = st.title || '—';
     const meta = [];
+    document.getElementById('skipBtn').classList.toggle('ad', !!st.ad);
+    if (st.ad) meta.push('AD PLAYING');
     if (st.live) meta.push('● LIVE');
     else if (st.duration) meta.push(`${fmt(st.time)} / ${fmt(st.duration)}`);
     if (st.playing !== undefined) meta.push(st.playing ? 'playing' : 'paused');

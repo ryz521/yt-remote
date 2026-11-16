@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .browser-profile/
 config.json
+qr.svg
+run.log
