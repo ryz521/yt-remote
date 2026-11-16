@@ -31,6 +31,8 @@ If neither Chrome nor Edge is installed, run `uv run playwright install chromium
 
 The remote has a tactical-HUD theme in the style of a sci-fi shooter command console. Its controls are play/pause, previous and next, seek ±10 s, volume, mute, captions, playback speed, **Fullscreen** (toggles the player, even during ads), **Skip Ad** (clicks YouTube's Skip button once it appears; it glows red while an ad plays), and home (**Base**). You can also search: tap a result to play it, or paste a YouTube link.
 
+**D-pad (TV-style navigation):** the arrows move an amber highlight between video thumbnails on any page, like a TV app. **OK** opens the highlighted video and **Back** goes back. On a video page, ◀ ▶ seek 10 s until you press ▼ to move into the recommended videos; ▲ from the top tile returns to the player. Quick repeated taps in one direction are sent as a single message, to stay within ntfy.sh's free quota.
+
 ## Config and security
 
 On first run the app creates `config.json` with a random topic such as `ytr-…`. **The topic name is the password.** Anyone who knows it can send commands, so don't share it. `config.json` is git-ignored. To get a new topic, delete `config.json`.

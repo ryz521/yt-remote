@@ -69,6 +69,12 @@
   button:active { transform: scale(.96); background: linear-gradient(180deg, #2a3343, #1b2230); color: var(--amber); }
   button:disabled { opacity: .35; }
   .grid2 { grid-template-columns: 1fr 1fr; }
+  .dpad { display:grid; gap:8px; grid-template-columns: repeat(3, minmax(0, 92px)); grid-template-rows: repeat(3, 72px);
+          justify-content:center; grid-template-areas: ". up ." "left ok right" "back down ."; }
+  .dpad button { min-height: 0; font-size: 22px; }
+  .d-up { grid-area: up; } .d-left { grid-area: left; } .d-right { grid-area: right; }
+  .d-down { grid-area: down; } .d-ok { grid-area: ok; font-size: 18px; letter-spacing: .15em; }
+  .d-back { grid-area: back; font-size: 13px; }
   #skipBtn.ad { background: linear-gradient(180deg, #ff6170, var(--red)); color: #fff; box-shadow: 0 0 18px rgba(255,59,78,.45); animation: blink 1.2s infinite; }
   button.big { font-size: 24px; }
   button.primary { background: linear-gradient(180deg, #ffc546, var(--amber)); color: #1a1100; box-shadow: 0 0 18px rgba(255,178,26,.35); }
@@ -101,6 +107,16 @@
     <div id="title">—</div>
     <div id="meta"></div>
     <progress id="prog" max="1" value="0"></progress>
+  </section>
+
+  <div class="tag">NAVIGATE</div>
+  <section class="dpad" aria-label="Directional pad">
+    <button class="d-up" data-nav="up" aria-label="Up">▲</button>
+    <button class="d-left" data-nav="left" aria-label="Left">◀</button>
+    <button class="d-ok primary" data-cmd="ok" aria-label="OK">OK</button>
+    <button class="d-right" data-nav="right" aria-label="Right">▶</button>
+    <button class="d-down" data-nav="down" aria-label="Down">▼</button>
+    <button class="d-back" data-cmd="back" aria-label="Back">↩ Back</button>
   </section>
 
   <div class="tag">PLAYBACK</div>
@@ -156,8 +172,8 @@
   const STATUS_TOPIC = TOPIC.slice(0, 57) + '-status';
   const conn = document.getElementById('conn');
 
-  async function send(action, value) {
-    const cmd = { action };
+  async function send(action, value, extra) {
+    const cmd = Object.assign({ action }, extra || {});
     if (value !== undefined) cmd.value = value;
     try {
       // text/plain body -> simple CORS request, no preflight. ntfy relays it to the laptop.
@@ -173,6 +189,24 @@
     const v = b.dataset.value;
     send(b.dataset.cmd, v === undefined ? undefined : Number(v));
   }));
+
+  // D-pad: quick repeated taps in one direction go out as one message ({n: 3}) to spare the ntfy quota.
+  let pendingNav = null;
+  function flushNav() {
+    if (!pendingNav) return;
+    clearTimeout(pendingNav.timer);
+    const p = pendingNav; pendingNav = null;
+    send('nav', p.dir, { n: p.n });
+  }
+  function nav(dir) {
+    if (pendingNav && pendingNav.dir === dir && pendingNav.n < 10) {
+      pendingNav.n++; clearTimeout(pendingNav.timer);
+    } else { flushNav(); pendingNav = { dir, n: 1 }; }
+    pendingNav.timer = setTimeout(flushNav, 250);
+    if (navigator.vibrate) navigator.vibrate(8);
+  }
+  document.querySelectorAll('button[data-nav]').forEach(b => b.addEventListener('click', () => nav(b.dataset.nav)));
+  document.querySelector('.d-ok').addEventListener('click', flushNav, { capture: true });  // finish moving before OK
 
   document.getElementById('search').addEventListener('submit', e => {
     e.preventDefault();

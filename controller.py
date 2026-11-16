@@ -51,6 +51,84 @@ PLAYER_JS = """([action, value]) => {
   return 'ok';
 }"""
 
+# TV-style spatial navigation over the video tiles of any YouTube page.
+# Tiles are found by link shape (any /watch or /shorts link big enough to be a thumbnail),
+# so it keeps working when YouTube changes its component names.
+NAV_JS = """([dir, n]) => {
+  const W = window;
+  const CONT = 'ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer, '
+             + 'yt-lockup-view-model, ytd-playlist-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, '
+             + 'ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer';
+  if (!document.getElementById('ytr-style')) {
+    const s = document.createElement('style');
+    s.id = 'ytr-style';
+    s.textContent = '[data-ytr-focus]{outline:4px solid #ffb21a !important;outline-offset:3px;border-radius:12px;'
+      + 'box-shadow:0 0 28px 6px rgba(255,178,26,.65) !important;transform:scale(1.04);transition:transform .12s;'
+      + 'position:relative;z-index:5}';
+    document.head.appendChild(s);
+  }
+  const cur = (W.__ytrFocus && W.__ytrFocus.isConnected && W.__ytrUrl === location.href) ? W.__ytrFocus : null;
+  const setFocus = el => {
+    document.querySelectorAll('[data-ytr-focus]').forEach(e => e.removeAttribute('data-ytr-focus'));
+    W.__ytrFocus = el; W.__ytrUrl = location.href;
+    if (el) { el.setAttribute('data-ytr-focus', '1'); el.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'smooth'}); }
+  };
+  const titleOf = el => {
+    const c = el.closest(CONT);
+    const t = c && c.querySelector('#video-title, .yt-lockup-metadata-view-model__title, h3, [title]');
+    return ((t && (t.getAttribute('title') || t.textContent)) || el.getAttribute('aria-label') || '').trim().slice(0, 90);
+  };
+  if (dir === 'peek') return {active: !!cur};
+  if (dir === 'clear') { setFocus(null); return {state: 'cleared'}; }
+
+  const best = new Map();
+  for (const a of document.querySelectorAll('a[href*="/watch?v="], a[href^="/shorts/"]')) {
+    if (a.closest('#movie_player, ytd-miniplayer, #masthead-container, [hidden]')) continue;
+    const r = a.getBoundingClientRect();
+    if (r.width < 80 || r.height < 40) continue;
+    const st = getComputedStyle(a);
+    if (st.visibility === 'hidden' || st.display === 'none') continue;
+    const key = a.closest(CONT) || a;  // one tile per card: keep its biggest link (the thumbnail)
+    const prev = best.get(key);
+    if (!prev || r.width * r.height > prev.r.width * prev.r.height) best.set(key, {a, r});
+  }
+  const list = [...best.values()].map(v => v.a);
+  if (!list.length) return {state: 'none'};
+
+  if (!cur) {  // first press: start at the top-left tile on screen
+    const inView = list.filter(t => { const r = t.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
+    const pool = inView.length ? inView : list;
+    pool.sort((a, b) => { const p = a.getBoundingClientRect(), q = b.getBoundingClientRect(); return (p.top - q.top) || (p.left - q.left); });
+    setFocus(pool[0]);
+    return {state: 'moved', title: titleOf(pool[0])};
+  }
+  let el = cur;
+  for (let i = 0; i < n; i++) {
+    const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    let pick = null, score = Infinity;
+    for (const t of list) {
+      if (t === el) continue;
+      const q = t.getBoundingClientRect(), dx = q.left + q.width / 2 - cx, dy = q.top + q.height / 2 - cy;
+      let main, cross;
+      if (dir === 'right') { if (dx <= 10) continue; main = dx; cross = Math.abs(dy); if (cross > r.height * 0.75) continue; }
+      else if (dir === 'left') { if (dx >= -10) continue; main = -dx; cross = Math.abs(dy); if (cross > r.height * 0.75) continue; }
+      else if (dir === 'down') { if (dy <= 10) continue; main = dy; cross = Math.abs(dx); }
+      else if (dir === 'up') { if (dy >= -10) continue; main = -dy; cross = Math.abs(dx); }
+      else return {state: 'bad'};
+      const s = main + cross * 2;
+      if (s < score) { score = s; pick = t; }
+    }
+    if (!pick) {
+      if (dir === 'down') { window.scrollBy({top: innerHeight * 0.8, behavior: 'smooth'}); break; }  // load more
+      if (dir === 'up') { setFocus(null); window.scrollTo({top: 0, behavior: 'smooth'}); return {state: 'cleared'}; }
+      break;
+    }
+    el = pick;
+  }
+  setFocus(el);
+  return {state: 'moved', title: titleOf(el)};
+}"""
+
 STATUS_JS = """() => {
   const out = {page: location.pathname, title: document.title.replace(/ - YouTube$/, '')};
   if (location.pathname === '/results') {
@@ -225,6 +303,17 @@ class Controller:
         finally:
             cdp.detach()
 
+    def navigate(self, page, direction: str, n: int):
+        """D-pad: move the tile highlight. On a video page, left/right seek while no tile is highlighted."""
+        if direction not in ("up", "down", "left", "right"):
+            return
+        if "/watch" in page.url and direction in ("left", "right") and not page.evaluate(NAV_JS, ["peek", 0])["active"]:
+            page.evaluate(PLAYER_JS, ["seek", (10 if direction == "right" else -10) * n])
+            return
+        res = page.evaluate(NAV_JS, [direction, n])
+        if res.get("title"):
+            print(f"[nav] {res['title']}")
+
     def skip_ad(self, page):
         """Click YouTube's own 'Skip' button once it is offered."""
         btn = page.locator(SKIP_AD_SEL).filter(visible=True).first
@@ -253,7 +342,16 @@ class Controller:
             page.evaluate(PLAYER_JS, ["speed", as_number(value, 1, 0.25, 2)])
         elif action == "next":
             self.press("Shift+N")
-        elif action == "prev":
+        elif action == "nav":
+            self.navigate(page, str(value), int(as_number(cmd.get("n"), 1, 1, 10)))
+            return  # highlight moves are visible on screen; skip the status publish to save ntfy quota
+        elif action == "ok":
+            focused = page.locator("[data-ytr-focus]")
+            if focused.count():
+                focused.first.click(timeout=3_000)
+            elif "/watch" in page.url:
+                page.evaluate(PLAYER_JS, ["toggle", 0])
+        elif action in ("prev", "back"):
             page.go_back(**NAV)
         elif action == "fullscreen":
             self.fullscreen(page)
